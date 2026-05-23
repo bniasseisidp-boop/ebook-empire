@@ -28,3 +28,4 @@ Thumbs.db
 storage/app/books/*.pdf
 storage/app/covers/*
 storage/app/public/covers/*
+.claude/
