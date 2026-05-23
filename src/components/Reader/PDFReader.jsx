@@ -1,141 +1,151 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import {
+  X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight,
+  Lock, BookOpen, Download, ShoppingCart, Clock, AlertTriangle, CheckCircle,
+} from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist'
 
-// Use exact installed version from unpkg to avoid version mismatch
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   `https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs`
 
-const PREVIEW_SECONDS = 300 // 5 minutes
+const PREVIEW_SECONDS = 300  // 5 minutes
+const MAX_PREVIEW_PAGES = 5  // first 5 pages only
 
 export default function PDFReader({ book, onClose, onBuy, onDownload }) {
-  const containerRef = useRef(null)
-  const pdfRef       = useRef(null)
-  const timerRef     = useRef(null)
+  const pdfRef      = useRef(null)
+  const canvasRef   = useRef(null)
+  const renderTask  = useRef(null)
 
-  const [timeLeft,  setTimeLeft]  = useState(PREVIEW_SECONDS)
-  const [expired,   setExpired]   = useState(false)
-  const [loading,   setLoading]   = useState(true)
-  const [error,     setError]     = useState(null)
-  const [pages,     setPages]     = useState(0)
-  const [curPage,   setCurPage]   = useState(1)
-  const [blurred,   setBlurred]   = useState(false)
-  const [zoom,      setZoom]      = useState(1.2)
-  const [email,     setEmail]     = useState('')
-  const [emailSent, setEmailSent] = useState(false)
+  const [timeLeft,   setTimeLeft]   = useState(PREVIEW_SECONDS)
+  const [expired,    setExpired]    = useState(false)
+  const [loading,    setLoading]    = useState(true)
+  const [rendering,  setRendering]  = useState(false)
+  const [error,      setError]      = useState(null)
+  const [totalPages, setTotalPages] = useState(0)
+  const [curPage,    setCurPage]    = useState(1)
+  const [blurred,    setBlurred]    = useState(false)
+  const [zoom,       setZoom]       = useState(1.2)
+  const [email,      setEmail]      = useState('')
+  const [emailSent,  setEmailSent]  = useState(false)
 
-  // ── Screenshot / print protection ──────────────────
+  const allowedPages = Math.min(totalPages, MAX_PREVIEW_PAGES)
+  const urgent       = timeLeft <= 60
+  const pct          = ((PREVIEW_SECONDS - timeLeft) / PREVIEW_SECONDS) * 100
+  const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+
+  /* ── Screenshot / print protection ── */
   useEffect(() => {
-    const blockPrint = e => {
-      if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault()
-        showProtect()
+    const blockKeys = e => {
+      if ((e.ctrlKey && (e.key === 'p' || e.key === 'P')) ||
+          (e.ctrlKey && e.shiftKey && (e.key === 's' || e.key === 'S'))) {
+        e.preventDefault(); showBlur()
       }
-      if (e.key === 'PrintScreen') {
-        navigator.clipboard.writeText('').catch(() => {})
-        showProtect()
-      }
-      if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
-        e.preventDefault()
-        showProtect()
-      }
-      // Escape closes reader
+      if (e.key === 'PrintScreen') { navigator.clipboard.writeText('').catch(() => {}); showBlur() }
       if (e.key === 'Escape') onClose()
+      // Keyboard page navigation
+      if (!expired) {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextPage()
+        if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   prevPage()
+      }
     }
-
-    const onVisChange = () => {
+    const onVis = () => {
       if (document.hidden && !expired) setBlurred(true)
-      else if (!document.hidden && !expired) setBlurred(false)
+      else if (!document.hidden) setBlurred(false)
     }
+    const noCtx = e => e.preventDefault()
 
-    document.addEventListener('keydown', blockPrint)
-    document.addEventListener('visibilitychange', onVisChange)
-    document.addEventListener('contextmenu', e => e.preventDefault())
-
+    document.addEventListener('keydown', blockKeys)
+    document.addEventListener('visibilitychange', onVis)
+    document.addEventListener('contextmenu', noCtx)
     return () => {
-      document.removeEventListener('keydown', blockPrint)
-      document.removeEventListener('visibilitychange', onVisChange)
-      document.removeEventListener('contextmenu', e => e.preventDefault())
+      document.removeEventListener('keydown', blockKeys)
+      document.removeEventListener('visibilitychange', onVis)
+      document.removeEventListener('contextmenu', noCtx)
     }
-  }, [expired, onClose])
+  }, [expired, curPage, totalPages, onClose])
 
-  const showProtect = () => {
-    setBlurred(true)
-    setTimeout(() => setBlurred(false), 2000)
-  }
+  const showBlur = () => { setBlurred(true); setTimeout(() => setBlurred(false), 2000) }
 
-  // ── Timer ───────────────────────────────────────────
+  /* ── Timer ── */
   useEffect(() => {
-    timerRef.current = setInterval(() => {
+    const id = setInterval(() => {
       setTimeLeft(t => {
-        if (t <= 1) {
-          clearInterval(timerRef.current)
-          setExpired(true)
-          setBlurred(true)
-          return 0
-        }
+        if (t <= 1) { clearInterval(id); setExpired(true); setBlurred(true); return 0 }
         return t - 1
       })
     }, 1000)
-    return () => clearInterval(timerRef.current)
+    return () => clearInterval(id)
   }, [])
 
-  // ── Load PDF ────────────────────────────────────────
+  /* ── Load PDF ── */
   useEffect(() => {
+    let cancelled = false
     const load = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true); setError(null)
       try {
-        const url = `/api/books/${book.id}/preview`
-        const pdf = await pdfjsLib.getDocument({ url }).promise
+        const pdf = await pdfjsLib.getDocument({ url: `/api/books/${book.id}/preview` }).promise
+        if (cancelled) return
         pdfRef.current = pdf
-        setPages(pdf.numPages)
-        await renderPage(1, pdf)
+        setTotalPages(pdf.numPages)
+        setCurPage(1)
       } catch (err) {
-        setError('Impossible de charger le PDF. ' + (err.message || ''))
+        if (!cancelled) setError('Impossible de charger le PDF. ' + (err.message || ''))
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
-    return () => { pdfRef.current?.destroy() }
+    return () => { cancelled = true; pdfRef.current?.destroy() }
   }, [book.id])
 
-  // ── Render page ──────────────────────────────────────
-  const renderPage = useCallback(async (num, pdfDoc) => {
-    const doc = pdfDoc || pdfRef.current
-    if (!doc) return
-    const page  = await doc.getPage(num)
-    const vp    = page.getViewport({ scale: zoom })
-    const canvas = document.getElementById('pdf-canvas')
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    canvas.width  = vp.width
-    canvas.height = vp.height
+  /* ── Render page ── */
+  const renderPage = useCallback(async (num) => {
+    const pdf = pdfRef.current
+    if (!pdf || !canvasRef.current) return
+    // cancel previous render
+    if (renderTask.current) { renderTask.current.cancel(); renderTask.current = null }
+    setRendering(true)
+    try {
+      const page = await pdf.getPage(num)
+      const vp   = page.getViewport({ scale: zoom })
+      const canvas = canvasRef.current
+      const ctx    = canvas.getContext('2d')
+      canvas.width  = vp.width
+      canvas.height = vp.height
 
-    await page.render({ canvasContext: ctx, viewport: vp }).promise
+      const task = page.render({ canvasContext: ctx, viewport: vp })
+      renderTask.current = task
+      await task.promise
 
-    // Watermark
-    ctx.save()
-    ctx.globalAlpha = 0.08
-    ctx.font = 'bold 42px Space Grotesk, sans-serif'
-    ctx.fillStyle = '#00e5ff'
-    ctx.textAlign  = 'center'
-    ctx.translate(vp.width / 2, vp.height / 2)
-    ctx.rotate(-30 * Math.PI / 180)
-    ctx.fillText('EMPIRE EBOOK — APERÇU', 0, 0)
-    ctx.fillText('EMPIRE EBOOK — APERÇU', 0, 80)
-    ctx.fillText('EMPIRE EBOOK — APERÇU', 0, -80)
-    ctx.restore()
+      // Watermark
+      ctx.save()
+      ctx.globalAlpha = 0.07
+      ctx.font = 'bold 40px Space Grotesk, Arial, sans-serif'
+      ctx.fillStyle = '#00e5ff'
+      ctx.textAlign  = 'center'
+      ctx.translate(vp.width / 2, vp.height / 2)
+      ctx.rotate(-25 * Math.PI / 180)
+      for (let y = -vp.height; y < vp.height; y += 90) {
+        ctx.fillText('EMPIRE EBOOK — APERÇU', 0, y)
+      }
+      ctx.restore()
+    } catch (e) {
+      if (e?.name !== 'RenderingCancelledException') {
+        console.error('Render error:', e)
+      }
+    } finally {
+      setRendering(false)
+    }
   }, [zoom])
 
   useEffect(() => {
-    if (!loading) renderPage(curPage)
-  }, [curPage, zoom, loading])
+    if (!loading && totalPages > 0) renderPage(curPage)
+  }, [curPage, zoom, loading, totalPages, renderPage])
 
-  const fmt = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`
-  const pct  = ((PREVIEW_SECONDS - timeLeft) / PREVIEW_SECONDS) * 100
-  const urgent = timeLeft <= 60
+  /* ── Page nav helpers ── */
+  const prevPage = () => setCurPage(p => Math.max(1, p - 1))
+  const nextPage = () => setCurPage(p => Math.min(allowedPages, p + 1))
 
   return (
     <AnimatePresence>
@@ -152,169 +162,269 @@ export default function PDFReader({ book, onClose, onBuy, onDownload }) {
       >
         {/* ── Top bar ── */}
         <div style={{
-          height: 60,
-          background: 'rgba(10,14,26,0.95)',
+          height: 60, background: 'rgba(10,14,26,0.97)',
           backdropFilter: 'blur(20px)',
           borderBottom: '1px solid var(--border)',
           display: 'flex', alignItems: 'center',
-          padding: '0 20px', gap: 16,
-          flexShrink: 0,
+          padding: '0 20px', gap: 14, flexShrink: 0,
         }}>
           {/* Close */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.1, background: 'rgba(255,100,100,0.15)' }}
+            whileTap={{ scale: 0.9 }}
             onClick={onClose}
             style={{
               width: 34, height: 34, borderRadius: '50%',
               background: 'rgba(255,255,255,0.06)',
               border: '1px solid var(--border)',
-              color: 'var(--text-2)', fontSize: 16,
+              color: 'var(--text-2)',
               cursor: 'pointer', display: 'flex',
               alignItems: 'center', justifyContent: 'center',
+              lineHeight: 0,
             }}
-          >✕</button>
+          >
+            <X size={15} />
+          </motion.button>
 
           {/* Title */}
-          <div style={{ flexGrow: 1, fontSize: 14, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            📖 {book.title}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexGrow: 1, overflow: 'hidden' }}>
+            <BookOpen size={15} color="var(--cyan)" style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {book.title}
+            </span>
+            <span style={{
+              fontSize: 10, padding: '2px 8px', borderRadius: 20,
+              background: 'rgba(0,229,255,0.1)', color: 'var(--cyan)',
+              border: '1px solid rgba(0,229,255,0.2)', flexShrink: 0,
+              fontWeight: 700, letterSpacing: 0.5,
+            }}>
+              APERÇU
+            </span>
           </div>
 
-          {/* Zoom */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[0.8,1.0,1.2,1.5].map(z => (
-              <button key={z}
-                onClick={() => setZoom(z)}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  fontSize: 11, fontWeight: 700,
-                  cursor: 'pointer',
-                  border: `1px solid ${zoom === z ? 'var(--cyan)' : 'var(--border)'}`,
-                  background: zoom === z ? 'var(--cyan-dim)' : 'transparent',
-                  color: zoom === z ? 'var(--cyan)' : 'var(--text-3)',
-                }}
-              >{Math.round(z*100)}%</button>
-            ))}
+          {/* Zoom controls */}
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              onClick={() => setZoom(z => Math.max(0.6, +(z - 0.2).toFixed(1)))}
+              style={{ padding: '5px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-3)', cursor: 'pointer', lineHeight: 0 }}>
+              <ZoomOut size={14} />
+            </motion.button>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 36, textAlign: 'center', fontWeight: 700 }}>
+              {Math.round(zoom * 100)}%
+            </span>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              onClick={() => setZoom(z => Math.min(2.0, +(z + 0.2).toFixed(1)))}
+              style={{ padding: '5px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-3)', cursor: 'pointer', lineHeight: 0 }}>
+              <ZoomIn size={14} />
+            </motion.button>
           </div>
+
+          {/* Page indicator */}
+          {totalPages > 0 && (
+            <div style={{
+              fontSize: 12, color: 'var(--text-2)',
+              padding: '4px 12px', borderRadius: 20,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid var(--border)',
+              fontWeight: 600,
+            }}>
+              Page <strong style={{ color: 'var(--text-1)' }}>{curPage}</strong> / <strong style={{ color: 'var(--cyan)' }}>{allowedPages}</strong>
+              {totalPages > MAX_PREVIEW_PAGES && <span style={{ color: 'var(--text-3)', fontSize: 10 }}> (aperçu)</span>}
+            </div>
+          )}
 
           {/* Timer */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '6px 16px',
-            borderRadius: 30,
-            background: urgent ? 'rgba(255,50,50,0.15)' : 'rgba(0,229,255,0.08)',
-            border: `1px solid ${urgent ? 'rgba(255,50,50,0.4)' : 'rgba(0,229,255,0.25)'}`,
-            boxShadow: urgent ? '0 0 20px rgba(255,50,50,0.3)' : '0 0 15px rgba(0,229,255,0.15)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 14px', borderRadius: 30,
+            background: urgent ? 'rgba(255,50,50,0.18)' : 'rgba(0,229,255,0.08)',
+            border: `1px solid ${urgent ? 'rgba(255,50,50,0.45)' : 'rgba(0,229,255,0.25)'}`,
+            boxShadow: urgent ? '0 0 20px rgba(255,50,50,0.2)' : '0 0 15px rgba(0,229,255,0.1)',
           }}>
-            <span style={{ fontSize: 14 }}>{urgent ? '⚠️' : '⏱️'}</span>
+            {urgent ? <AlertTriangle size={14} color="#ff6b6b" /> : <Clock size={14} color="var(--cyan)" />}
             <span style={{
               fontFamily: "'Space Grotesk', monospace",
-              fontSize: 18, fontWeight: 800,
+              fontSize: 17, fontWeight: 800,
               color: urgent ? '#ff6b6b' : 'var(--cyan)',
               letterSpacing: 2,
-              animation: urgent ? 'pulse 1s infinite' : 'none',
             }}>
               {fmt(timeLeft)}
             </span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>restant</span>
           </div>
         </div>
 
         {/* Progress bar */}
         <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}>
-          <div style={{
-            height: '100%',
-            width: `${pct}%`,
-            background: urgent
-              ? 'linear-gradient(90deg,#ff6b6b,#ff0000)'
-              : 'linear-gradient(90deg,var(--cyan),var(--purple))',
-            transition: 'width 1s linear',
-          }} />
+          <motion.div
+            style={{
+              height: '100%',
+              background: urgent ? 'linear-gradient(90deg,#ff6b6b,#ff0000)' : 'linear-gradient(90deg,var(--cyan),var(--purple))',
+              originX: 0,
+            }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 1, ease: 'linear' }}
+          />
         </div>
 
-        {/* ── PDF area ── */}
-        <div
-          ref={containerRef}
-          style={{
+        {/* ── PDF area with side nav ── */}
+        <div style={{ flexGrow: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
+          {/* Left nav arrow */}
+          <AnimatePresence>
+            {!expired && curPage > 1 && (
+              <motion.button
+                initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                whileHover={{ scale: 1.08, background: 'rgba(0,229,255,0.15)' }}
+                whileTap={{ scale: 0.93 }}
+                onClick={prevPage}
+                style={{
+                  position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 20,
+                  width: 52, height: 52, borderRadius: '50%',
+                  background: 'rgba(10,14,26,0.88)',
+                  border: '1px solid rgba(0,229,255,0.3)',
+                  color: 'var(--cyan)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(12px)',
+                  lineHeight: 0,
+                }}
+              >
+                <ChevronLeft size={24} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {/* Right nav arrow */}
+          <AnimatePresence>
+            {!expired && curPage < allowedPages && (
+              <motion.button
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
+                whileHover={{ scale: 1.08, background: 'rgba(0,229,255,0.15)' }}
+                whileTap={{ scale: 0.93 }}
+                onClick={nextPage}
+                style={{
+                  position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 20,
+                  width: 52, height: 52, borderRadius: '50%',
+                  background: 'rgba(10,14,26,0.88)',
+                  border: '1px solid rgba(0,229,255,0.3)',
+                  color: 'var(--cyan)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(12px)',
+                  lineHeight: 0,
+                }}
+              >
+                <ChevronRight size={24} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {/* Scrollable canvas area */}
+          <div style={{
             flexGrow: 1, overflow: 'auto',
             display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-            padding: '24px',
+            padding: '28px 80px',
             position: 'relative',
-          }}
-        >
-          {loading && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              gap: 16,
-            }}>
-              <div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
-              <p style={{ color: 'var(--text-3)', fontSize: 14 }}>Chargement du livre…</p>
-            </div>
-          )}
-
-          {error && (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📵</div>
-              <p style={{ color: '#ff6b6b' }}>{error}</p>
-            </div>
-          )}
-
-          {/* Blur overlay when expired or tab hidden */}
-          {blurred && !expired && (
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 10,
-              backdropFilter: 'blur(20px)',
-              background: 'rgba(6,10,18,0.6)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <div style={{ textAlign: 'center', color: 'var(--text-2)' }}>
-                <div style={{ fontSize: 48, marginBottom: 8 }}>🔒</div>
-                <p>Revenez sur cet onglet</p>
+          }}>
+            {loading && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+                <div className="spinner" style={{ width: 44, height: 44, borderWidth: 3 }} />
+                <p style={{ color: 'var(--text-3)', fontSize: 14 }}>Chargement du livre…</p>
               </div>
-            </div>
-          )}
+            )}
 
-          {!loading && !error && (
-            <div style={{
-              boxShadow: '0 20px 80px rgba(0,0,0,0.8)',
-              borderRadius: 6,
-              overflow: 'hidden',
-              filter: blurred ? 'blur(30px)' : 'none',
-              transition: 'filter 0.5s ease',
-            }}>
-              <canvas id="pdf-canvas" style={{ display: 'block', maxWidth: '100%' }} />
-            </div>
-          )}
+            {error && (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Lock size={48} color="#ff6b6b" style={{ margin: '0 auto 12px' }} />
+                <p style={{ color: '#ff6b6b', marginBottom: 8 }}>{error}</p>
+                <p style={{ color: 'var(--text-3)', fontSize: 12 }}>Vérifiez que le serveur Laravel est démarré sur le port 8000.</p>
+              </div>
+            )}
+
+            {/* Blur overlay (tab switch) */}
+            {blurred && !expired && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                style={{
+                  position: 'absolute', inset: 0, zIndex: 10,
+                  backdropFilter: 'blur(20px)', background: 'rgba(6,10,18,0.7)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12,
+                }}
+              >
+                <Lock size={40} color="var(--cyan)" />
+                <p style={{ color: 'var(--text-2)', fontWeight: 600 }}>Revenez sur cet onglet</p>
+              </motion.div>
+            )}
+
+            {!loading && !error && (
+              <motion.div
+                animate={{ filter: blurred ? 'blur(30px)' : 'blur(0px)', opacity: rendering ? 0.7 : 1 }}
+                transition={{ duration: 0.4 }}
+                style={{
+                  boxShadow: '0 24px 80px rgba(0,0,0,0.8)',
+                  borderRadius: 6, overflow: 'hidden',
+                  maxWidth: '100%',
+                }}
+              >
+                <canvas ref={canvasRef} style={{ display: 'block', maxWidth: '100%' }} />
+              </motion.div>
+            )}
+          </div>
         </div>
 
-        {/* ── Page controls ── */}
-        {!expired && (
-          <div style={{
-            height: 56, background: 'rgba(10,14,26,0.95)',
-            borderTop: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 16, flexShrink: 0,
-          }}>
-            <button
+        {/* ── Bottom page control bar ── */}
+        {!expired && totalPages > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            style={{
+              height: 58, background: 'rgba(10,14,26,0.97)',
+              borderTop: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 20, flexShrink: 0,
+            }}
+          >
+            <motion.button
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               className="btn btn-ghost"
-              style={{ padding: '6px 16px', fontSize: 12 }}
+              style={{ padding: '6px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
               disabled={curPage <= 1}
-              onClick={() => setCurPage(p => Math.max(1, p - 1))}
-            >← Précédent</button>
-            <span style={{ color: 'var(--text-2)', fontSize: 13 }}>
-              Page <strong style={{ color: 'var(--text-1)' }}>{curPage}</strong> / {pages}
-            </span>
-            <button
+              onClick={prevPage}
+            >
+              <ChevronLeft size={15} /> Précédent
+            </motion.button>
+
+            {/* Page dots */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {Array.from({ length: allowedPages }, (_, i) => i + 1).map(p => (
+                <motion.button
+                  key={p}
+                  whileHover={{ scale: 1.3 }}
+                  whileTap={{ scale: 0.85 }}
+                  onClick={() => setCurPage(p)}
+                  style={{
+                    width: p === curPage ? 24 : 8,
+                    height: 8, borderRadius: 99,
+                    background: p === curPage ? 'var(--cyan)' : 'rgba(255,255,255,0.15)',
+                    border: 'none', cursor: 'pointer', padding: 0,
+                    transition: 'all 0.3s ease',
+                    boxShadow: p === curPage ? '0 0 10px rgba(0,229,255,0.5)' : 'none',
+                  }}
+                />
+              ))}
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               className="btn btn-ghost"
-              style={{ padding: '6px 16px', fontSize: 12 }}
-              disabled={curPage >= pages}
-              onClick={() => setCurPage(p => Math.min(pages, p + 1))}
-            >Suivant →</button>
-          </div>
+              style={{ padding: '6px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+              disabled={curPage >= allowedPages}
+              onClick={nextPage}
+            >
+              Suivant <ChevronRight size={15} />
+            </motion.button>
+          </motion.div>
         )}
 
-        {/* ── Expiry CTA ── */}
+        {/* ── Expiry modal ── */}
         <AnimatePresence>
           {expired && (
             <motion.div
@@ -322,51 +432,50 @@ export default function PDFReader({ book, onClose, onBuy, onDownload }) {
               animate={{ opacity: 1 }}
               style={{
                 position: 'absolute', inset: 0, zIndex: 50,
-                background: 'rgba(6,10,18,0.92)',
-                backdropFilter: 'blur(16px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: 20,
+                background: 'rgba(6,10,18,0.94)',
+                backdropFilter: 'blur(18px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
               }}
             >
               <motion.div
-                initial={{ scale: 0.85, opacity: 0, y: 30 }}
+                initial={{ scale: 0.82, opacity: 0, y: 36 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 20 }}
                 style={{
                   background: 'var(--bg-deep)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 24,
-                  padding: 40,
-                  maxWidth: 480, width: '100%',
-                  textAlign: 'center',
-                  boxShadow: '0 0 60px rgba(0,229,255,0.2)',
+                  border: '1px solid rgba(0,229,255,0.2)',
+                  borderRadius: 26, padding: '44px 40px',
+                  maxWidth: 500, width: '100%', textAlign: 'center',
+                  boxShadow: '0 0 80px rgba(0,229,255,0.18)',
                 }}
               >
-                {/* Animated book closing */}
-                <div style={{ fontSize: 64, marginBottom: 8, animation: 'float 3s ease-in-out infinite' }}>📚</div>
-                <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
-                  Votre aperçu est <span className="gradient-text">terminé !</span>
+                <motion.div
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
+                  style={{ marginBottom: 16 }}
+                >
+                  <BookOpen size={60} color="var(--cyan)" style={{ margin: '0 auto' }} />
+                </motion.div>
+
+                <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 10 }}>
+                  Aperçu <span className="gradient-text">terminé !</span>
                 </h2>
-                <p style={{ color: 'var(--text-3)', fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>
-                  Vous avez lu <strong style={{ color: 'var(--cyan)' }}>5 minutes gratuites</strong> de «&nbsp;{book.title}&nbsp;».
-                  <br/>
+                <p style={{ color: 'var(--text-3)', fontSize: 14, marginBottom: 28, lineHeight: 1.7 }}>
+                  Vous avez lu <strong style={{ color: 'var(--cyan)' }}>5 minutes gratuites</strong> de<br/>
+                  «&nbsp;{book.title}&nbsp;»
+                  <br />
                   {book.is_free
-                    ? 'Téléchargez ce livre gratuitement !'
-                    : `Obtenez l'accès complet pour seulement ${Number(book.price).toFixed(2)} €`
-                  }
+                    ? 'Ce livre est 100% gratuit — entrez votre email !'
+                    : `Obtenez l'accès complet pour ${Number(book.price).toFixed(2)} €`}
                 </p>
 
                 {!book.is_free && (
-                  <div style={{ marginBottom: 24 }}>
-                    <div style={{
-                      fontSize: 32, fontWeight: 900,
-                      fontFamily: "'Space Grotesk',sans-serif",
-                      marginBottom: 4,
-                    }}>
-                      <span className="gradient-text-gold">{Number(book.price).toFixed(2)} €</span>
+                  <div style={{ marginBottom: 24, padding: '14px', background: 'rgba(0,229,255,0.06)', borderRadius: 14, border: '1px solid rgba(0,229,255,0.15)' }}>
+                    <div style={{ fontSize: 32, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: '#ffd700' }}>
+                      {Number(book.price).toFixed(2)} €
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                      Accès illimité + Licence + Email de livraison
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                      Accès illimité · Licence · Livraison email immédiate
                     </div>
                   </div>
                 )}
@@ -375,40 +484,35 @@ export default function PDFReader({ book, onClose, onBuy, onDownload }) {
                   {book.is_free ? (
                     <>
                       <input
-                        className="input"
-                        type="email"
-                        placeholder="Votre email pour télécharger"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
+                        className="input" type="email"
+                        placeholder="votre@email.com"
+                        value={email} onChange={e => setEmail(e.target.value)}
                         style={{ textAlign: 'center' }}
                       />
-                      <button
+                      <motion.button
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                         className="btn btn-cyan"
-                        style={{ width: '100%', justifyContent: 'center', padding: '14px' }}
+                        style={{ width: '100%', justifyContent: 'center', padding: '14px', gap: 8 }}
                         onClick={() => { if (email) { onDownload(book, email); setEmailSent(true) } }}
                         disabled={emailSent}
                       >
-                        {emailSent ? '✅ Lien envoyé !' : '⬇️ Télécharger gratuitement'}
-                      </button>
+                        {emailSent ? <><CheckCircle size={16} /> Lien envoyé !</> : <><Download size={16} /> Télécharger gratuitement</>}
+                      </motion.button>
                     </>
                   ) : (
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                       className="btn btn-primary"
-                      style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15 }}
+                      style={{ width: '100%', justifyContent: 'center', padding: '16px', fontSize: 15, gap: 8 }}
                       onClick={() => onBuy(book)}
                     >
-                      💳 Acheter maintenant — {Number(book.price).toFixed(2)} €
-                    </button>
+                      <ShoppingCart size={17} /> Acheter — {Number(book.price).toFixed(2)} €
+                    </motion.button>
                   )}
 
                   <button
                     onClick={onClose}
-                    style={{
-                      background: 'transparent', border: 'none',
-                      color: 'var(--text-3)', fontSize: 12,
-                      cursor: 'pointer', padding: '8px',
-                      textDecoration: 'underline',
-                    }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-3)', fontSize: 12, cursor: 'pointer', padding: '8px', textDecoration: 'underline' }}
                   >
                     Retour à la boutique
                   </button>
@@ -417,10 +521,6 @@ export default function PDFReader({ book, onClose, onBuy, onDownload }) {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <style>{`
-          @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        `}</style>
       </motion.div>
     </AnimatePresence>
   )
