@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as pdfjsLib from 'pdfjs-dist'
 
+// Use exact installed version from unpkg to avoid version mismatch
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs'
+  `https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs`
 
 const PREVIEW_SECONDS = 300 // 5 minutes
 

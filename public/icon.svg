@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0044cc"/>
+      <stop offset="100%" stop-color="#00e5ff"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c4dff"/>
+      <stop offset="100%" stop-color="#00e5ff"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="64" height="64" rx="14" fill="#060a12"/>
+  <!-- Book shape -->
+  <rect x="10" y="14" width="22" height="36" rx="3" fill="url(#g1)" opacity="0.9"/>
+  <rect x="14" y="11" width="22" height="36" rx="3" fill="#0a1535"/>
+  <rect x="14" y="11" width="22" height="36" rx="3" fill="none" stroke="url(#g2)" stroke-width="1.5"/>
+  <!-- Pages lines -->
+  <line x1="19" y1="20" x2="31" y2="20" stroke="url(#g2)" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+  <line x1="19" y1="25" x2="31" y2="25" stroke="url(#g2)" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+  <line x1="19" y1="30" x2="27" y2="30" stroke="url(#g2)" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+  <!-- E letter -->
+  <text x="36" y="45" font-family="Arial Black, sans-serif" font-size="22" font-weight="900" fill="url(#g2)">E</text>
+  <!-- Glow dot -->
+  <circle cx="52" cy="16" r="5" fill="none" stroke="#00e5ff" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="52" cy="16" r="2" fill="#00e5ff" opacity="0.9"/>
+</svg>

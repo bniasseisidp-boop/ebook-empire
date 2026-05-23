@@ -1,56 +1,77 @@
 import { useEffect, useRef } from 'react'
 
-/* ═══════════════════════════════════════════════════════
-   EMPIRE NEURAL PARTICLE BACKGROUND
-   Inspired by: constellation network with glowing nodes,
-   floating binary symbols, pulsing halos — cyan & violet
-═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   EMPIRE NEURAL BACKGROUND — Premium v2
+   • Réseau neural (nodes + connexions)
+   • Bulles montantes (soap-bubble style — stroke only, tiny)
+   • Chiffres & symboles flottants
+   • Adaptatif dark/light theme via CSS variable
+════════════════════════════════════════════════════════════════ */
 
-const COLORS = {
-  cyan:   { r: 0,   g: 229, b: 255 },
-  violet: { r: 124, g: 77,  b: 255 },
-  blue:   { r: 0,   g: 140, b: 255 },
-}
+const CYAN   = { r: 0,   g: 229, b: 255 }
+const VIOLET = { r: 124, g: 77,  b: 255 }
+const BLUE   = { r: 0,   g: 140, b: 255 }
 
 function rgba(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})` }
+function pick(arr)  { return arr[Math.floor(Math.random() * arr.length)] }
 
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
-
-function createParticle(w, h) {
-  const colorKey = pick(['cyan','cyan','violet','blue'])
-  const color = COLORS[colorKey]
+// ── Neural node ──────────────────────────────────────────────
+function makeNode(W, H) {
+  const col = pick([CYAN, CYAN, VIOLET, BLUE])
   return {
-    x:     Math.random() * w,
-    y:     Math.random() * h,
-    vx:    (Math.random() - 0.5) * 0.35,
-    vy:    (Math.random() - 0.5) * 0.35,
-    r:     Math.random() * 2.5 + 1.5,
-    color,
-    pulse: Math.random() * Math.PI * 2,
-    hasHalo:  Math.random() > 0.65,
+    x:      Math.random() * W,
+    y:      Math.random() * H,
+    vx:     (Math.random() - 0.5) * 0.3,
+    vy:     (Math.random() - 0.5) * 0.3,
+    r:      Math.random() * 2 + 1.2,
+    color:  col,
+    pulse:  Math.random() * Math.PI * 2,
+    hasRing:  Math.random() > 0.7,
     hasCross: Math.random() > 0.85,
-    glowSize: Math.random() * 12 + 8,
+    glow:   Math.random() * 10 + 6,
   }
 }
 
-function createSymbol(w, h) {
-  const chars = ['0','1','0','1','0','1','+','~','@','#','<','>','/','\\']
+// ── Rising bubble ────────────────────────────────────────────
+function makeBubble(W, H, fromBottom = true) {
+  const col = pick([CYAN, VIOLET, BLUE])
   return {
-    x:   Math.random() * w,
-    y:   Math.random() * h,
-    char: pick(chars),
-    opacity: Math.random() * 0.22 + 0.04,
-    size:    Math.floor(Math.random() * 8) + 9,
-    vy: -(Math.random() * 0.25 + 0.08),
-    vx:  (Math.random() - 0.5) * 0.15,
-    color: Math.random() > 0.5
-      ? `rgba(0,229,255,`
-      : `rgba(124,77,255,`
+    x:     Math.random() * W,
+    y:     fromBottom ? H + Math.random() * 80 : Math.random() * H,
+    r:     Math.random() * 10 + 3,          // 3–13 px — small!
+    vx:    (Math.random() - 0.5) * 0.3,
+    vy:    -(Math.random() * 0.6 + 0.2),    // rise up
+    alpha: Math.random() * 0.35 + 0.08,
+    color: col,
+    wobble: Math.random() * Math.PI * 2,
+    wobbleSpeed: (Math.random() - 0.5) * 0.04,
   }
 }
 
-export default function ParticleBackground() {
+// ── Floating symbol ──────────────────────────────────────────
+function makeSymbol(W, H) {
+  const CHARS = [
+    '0','1','0','1','0','1','2','3','7','8',
+    '+','~','×','÷','∑','π','∞','#','@','<','>',
+  ]
+  const col = pick([CYAN, VIOLET, BLUE])
+  return {
+    x:     Math.random() * W,
+    y:     Math.random() * H,
+    char:  pick(CHARS),
+    size:  Math.floor(Math.random() * 9) + 8,  // 8–16px
+    alpha: Math.random() * 0.22 + 0.04,
+    vy:    -(Math.random() * 0.18 + 0.06),
+    vx:    (Math.random() - 0.5) * 0.12,
+    color: col,
+  }
+}
+
+export default function ParticleBackground({ theme = 'dark' }) {
   const canvasRef = useRef(null)
+  const themeRef  = useRef(theme)
+
+  useEffect(() => { themeRef.current = theme }, [theme])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -61,124 +82,178 @@ export default function ParticleBackground() {
     canvas.width  = W
     canvas.height = H
 
-    const PARTICLE_COUNT = Math.min(90, Math.floor(W * H / 14000))
-    const SYMBOL_COUNT   = Math.min(30, Math.floor(W * H / 22000))
-    const CONNECT_DIST   = 140
+    const NODE_COUNT   = Math.min(70,  Math.floor(W * H / 16000))
+    const BUBBLE_COUNT = Math.min(50,  Math.floor(W * H / 18000))
+    const SYMBOL_COUNT = Math.min(35,  Math.floor(W * H / 20000))
+    const CONNECT_DIST = 130
 
-    let particles = Array.from({ length: PARTICLE_COUNT }, () => createParticle(W, H))
-    let symbols   = Array.from({ length: SYMBOL_COUNT },   () => createSymbol(W, H))
+    let nodes   = Array.from({ length: NODE_COUNT },   () => makeNode(W, H))
+    let bubbles = Array.from({ length: BUBBLE_COUNT }, () => makeBubble(W, H, false))
+    let symbols = Array.from({ length: SYMBOL_COUNT }, () => makeSymbol(W, H))
 
     let raf = null
 
     const draw = () => {
-      // Deep space background
-      ctx.fillStyle = '#060a12'
-      ctx.fillRect(0, 0, W, H)
+      const isDark = themeRef.current === 'dark'
 
-      // ── Subtle radial nebula glow in center ──
-      const nebula = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W * 0.55)
-      nebula.addColorStop(0, 'rgba(0,80,180,0.07)')
-      nebula.addColorStop(0.5, 'rgba(60,0,120,0.04)')
-      nebula.addColorStop(1, 'transparent')
-      ctx.fillStyle = nebula
-      ctx.fillRect(0, 0, W, H)
+      // ── Background ──
+      if (isDark) {
+        ctx.fillStyle = '#060a12'
+        ctx.fillRect(0, 0, W, H)
 
-      // ── Draw connection lines ──
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x
-          const dy = particles[i].y - particles[j].y
+        // Nebula glow center
+        const neb = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W * 0.55)
+        neb.addColorStop(0,   'rgba(0,60,160,0.06)')
+        neb.addColorStop(0.5, 'rgba(50,0,100,0.03)')
+        neb.addColorStop(1,   'transparent')
+        ctx.fillStyle = neb
+        ctx.fillRect(0, 0, W, H)
+      } else {
+        // Light mode — clean white
+        ctx.fillStyle = '#f8faff'
+        ctx.fillRect(0, 0, W, H)
+
+        // Soft radial gradient
+        const neb = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W * 0.7)
+        neb.addColorStop(0,   'rgba(200,230,255,0.5)')
+        neb.addColorStop(0.5, 'rgba(220,200,255,0.2)')
+        neb.addColorStop(1,   'transparent')
+        ctx.fillStyle = neb
+        ctx.fillRect(0, 0, W, H)
+      }
+
+      const lineAlpha  = isDark ? 0.22 : 0.14
+      const nodeAlpha  = isDark ? 1    : 0.85
+      const symAlpha   = isDark ? 1    : 0.6
+
+      // ── Connection lines ──
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x
+          const dy = nodes[i].y - nodes[j].y
           const d  = Math.sqrt(dx*dx + dy*dy)
           if (d < CONNECT_DIST) {
-            const alpha = (1 - d / CONNECT_DIST) * 0.28
-            const ci = particles[i].color
-            ctx.strokeStyle = rgba(ci, alpha)
-            ctx.lineWidth = 0.6
+            const a = (1 - d / CONNECT_DIST) * lineAlpha
+            ctx.strokeStyle = rgba(nodes[i].color, a)
+            ctx.lineWidth = 0.5
             ctx.beginPath()
-            ctx.moveTo(particles[i].x, particles[i].y)
-            ctx.lineTo(particles[j].x, particles[j].y)
+            ctx.moveTo(nodes[i].x, nodes[i].y)
+            ctx.lineTo(nodes[j].x, nodes[j].y)
             ctx.stroke()
           }
         }
       }
 
-      // ── Draw floating symbols ──
+      // ── Floating symbols ──
       symbols.forEach(s => {
         ctx.font = `${s.size}px 'Courier New', monospace`
-        ctx.fillStyle = s.color + s.opacity + ')'
+        ctx.fillStyle = rgba(s.color, s.alpha * symAlpha)
         ctx.fillText(s.char, s.x, s.y)
-
         s.y += s.vy
         s.x += s.vx
-
         if (s.y < -20) {
           s.y = H + 20
           s.x = Math.random() * W
-          s.char = pick(['0','1','0','1','+','~'])
+          s.char = pick(['0','1','0','1','+','~','π','∞','×'])
         }
         if (s.x < -20 || s.x > W + 20) s.x = Math.random() * W
       })
 
-      // ── Draw particles ──
-      particles.forEach(p => {
-        p.pulse += 0.018
-        const pulseOff = Math.sin(p.pulse) * 0.5
-        const r = p.r + pulseOff
+      // ── Soap bubbles (rising) ──
+      bubbles.forEach(b => {
+        b.wobble += b.wobbleSpeed
+        b.x += b.vx + Math.sin(b.wobble) * 0.3
+        b.y += b.vy
 
-        // Outer ambient glow
-        const glow1 = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.glowSize * 3)
-        glow1.addColorStop(0, rgba(p.color, 0.18))
-        glow1.addColorStop(0.5, rgba(p.color, 0.04))
-        glow1.addColorStop(1, 'transparent')
-        ctx.fillStyle = glow1
+        if (b.y + b.r < 0) {
+          Object.assign(b, makeBubble(W, H, true))
+        }
+
+        const a = b.alpha * (isDark ? 1 : 0.7)
+
+        // Bubble outer ring
         ctx.beginPath()
-        ctx.arc(p.x, p.y, p.glowSize * 3, 0, Math.PI * 2)
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2)
+        ctx.strokeStyle = rgba(b.color, a)
+        ctx.lineWidth   = 0.8
+        ctx.stroke()
+
+        // Bubble inner subtle fill
+        const grad = ctx.createRadialGradient(
+          b.x - b.r * 0.3, b.y - b.r * 0.3, 0,
+          b.x, b.y, b.r
+        )
+        grad.addColorStop(0,   rgba(b.color, a * 0.25))
+        grad.addColorStop(0.5, rgba(b.color, a * 0.06))
+        grad.addColorStop(1,   'transparent')
+        ctx.fillStyle = grad
+        ctx.beginPath()
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2)
         ctx.fill()
 
-        // Halo ring (for some nodes)
-        if (p.hasHalo) {
-          const ringSize = r * 4 + Math.sin(p.pulse * 0.7) * 2
-          ctx.strokeStyle = rgba(p.color, 0.25)
-          ctx.lineWidth = 0.8
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, ringSize, 0, Math.PI * 2)
-          ctx.stroke()
+        // Tiny specular highlight
+        ctx.beginPath()
+        ctx.arc(b.x - b.r * 0.28, b.y - b.r * 0.28, b.r * 0.18, 0, Math.PI * 2)
+        ctx.fillStyle = rgba({ r:255, g:255, b:255 }, isDark ? 0.4 : 0.6)
+        ctx.fill()
+      })
 
-          ctx.strokeStyle = rgba(p.color, 0.1)
-          ctx.lineWidth = 0.5
+      // ── Neural nodes ──
+      nodes.forEach(n => {
+        n.pulse += 0.016
+        const pr = n.r + Math.sin(n.pulse) * 0.4
+
+        // Ambient glow
+        const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.glow * 2.5)
+        glow.addColorStop(0, rgba(n.color, isDark ? 0.16 : 0.1))
+        glow.addColorStop(1, 'transparent')
+        ctx.fillStyle = glow
+        ctx.beginPath()
+        ctx.arc(n.x, n.y, n.glow * 2.5, 0, Math.PI * 2)
+        ctx.fill()
+
+        // Halo ring
+        if (n.hasRing) {
+          const ring = pr * 4 + Math.sin(n.pulse * 0.7) * 1.5
+          ctx.strokeStyle = rgba(n.color, isDark ? 0.22 : 0.16)
+          ctx.lineWidth = 0.7
           ctx.beginPath()
-          ctx.arc(p.x, p.y, ringSize * 1.8, 0, Math.PI * 2)
+          ctx.arc(n.x, n.y, ring, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.strokeStyle = rgba(n.color, isDark ? 0.08 : 0.05)
+          ctx.lineWidth = 0.4
+          ctx.beginPath()
+          ctx.arc(n.x, n.y, ring * 1.9, 0, Math.PI * 2)
           ctx.stroke()
         }
 
-        // Cross marker (like in the reference image)
-        if (p.hasCross) {
-          const cs = r * 3
-          ctx.strokeStyle = rgba(p.color, 0.4)
-          ctx.lineWidth = 0.8
+        // Cross marker
+        if (n.hasCross) {
+          const cs = pr * 3
+          ctx.strokeStyle = rgba(n.color, isDark ? 0.4 : 0.3)
+          ctx.lineWidth = 0.7
           ctx.beginPath()
-          ctx.moveTo(p.x - cs, p.y); ctx.lineTo(p.x + cs, p.y)
-          ctx.moveTo(p.x, p.y - cs); ctx.lineTo(p.x, p.y + cs)
+          ctx.moveTo(n.x - cs, n.y); ctx.lineTo(n.x + cs, n.y)
+          ctx.moveTo(n.x, n.y - cs); ctx.lineTo(n.x, n.y + cs)
           ctx.stroke()
         }
 
-        // Core dot gradient
-        const core = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.5)
-        core.addColorStop(0, '#ffffff')
-        core.addColorStop(0.3, rgba(p.color, 1))
-        core.addColorStop(1, rgba(p.color, 0))
+        // Core dot
+        const core = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, pr * 2.2)
+        core.addColorStop(0,   `rgba(255,255,255,${nodeAlpha})`)
+        core.addColorStop(0.3, rgba(n.color, nodeAlpha))
+        core.addColorStop(1,   rgba(n.color, 0))
         ctx.fillStyle = core
         ctx.beginPath()
-        ctx.arc(p.x, p.y, r * 2.5, 0, Math.PI * 2)
+        ctx.arc(n.x, n.y, pr * 2.2, 0, Math.PI * 2)
         ctx.fill()
 
-        // Move
-        p.x += p.vx
-        p.y += p.vy
-        if (p.x < -10)     { p.x = W + 10 }
-        if (p.x > W + 10)  { p.x = -10 }
-        if (p.y < -10)     { p.y = H + 10 }
-        if (p.y > H + 10)  { p.y = -10 }
+        // Move (wrap around edges)
+        n.x += n.vx;  n.y += n.vy
+        if (n.x < -10) n.x = W + 10
+        if (n.x > W + 10) n.x = -10
+        if (n.y < -10) n.y = H + 10
+        if (n.y > H + 10) n.y = -10
       })
 
       raf = requestAnimationFrame(draw)

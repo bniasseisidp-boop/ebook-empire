@@ -218,8 +218,8 @@ export default function AdminPage() {
               {logging ? <><span className="spinner"/>&nbsp;Connexion…</> : '🔐 Se connecter'}
             </button>
           </form>
-          <p style={{ textAlign:'center', marginTop:20, fontSize:12, color:'var(--text-3)' }}>
-            Défaut: <code style={{ color:'var(--cyan)' }}>admin</code> / <code style={{ color:'var(--cyan)' }}>empire2025</code>
+          <p style={{ textAlign:'center', marginTop:16, fontSize:11, color:'var(--text-3)' }}>
+            🔒 Accès réservé aux administrateurs autorisés
           </p>
         </motion.div>
       </div>

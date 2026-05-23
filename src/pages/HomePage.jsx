@@ -9,6 +9,7 @@ import EmailCaptureModal from '../components/Modals/EmailCaptureModal'
 import PaymentModal from '../components/Modals/PaymentModal'
 import SuccessModal from '../components/Modals/SuccessModal'
 import { getBooks } from '../services/api'
+import { useTheme } from '../context/ThemeContext'
 
 /* ── Typewriter effect ─────────────────────────── */
 function Typewriter({ words, speed = 120, pause = 2000 }) {
@@ -37,6 +38,7 @@ function Typewriter({ words, speed = 120, pause = 2000 }) {
 }
 
 export default function HomePage() {
+  const { theme } = useTheme()
   const [books,       setBooks]       = useState([])
   const [filtered,    setFiltered]    = useState([])
   const [loading,     setLoading]     = useState(true)
@@ -88,7 +90,7 @@ export default function HomePage() {
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh' }}>
-      <ParticleBackground />
+      <ParticleBackground theme={theme} />
       <Header />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
@@ -174,7 +176,7 @@ export default function HomePage() {
               display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center',
               marginTop: 64,
               padding: '24px 40px',
-              background: 'rgba(255,255,255,0.03)',
+              background: 'var(--bg-card)',
               backdropFilter: 'blur(20px)',
               border: '1px solid var(--border)',
               borderRadius: 20,
@@ -305,7 +307,7 @@ export default function HomePage() {
         {/* ────────── HOW IT WORKS ────────── */}
         <section style={{
           padding: '80px 32px',
-          background: 'rgba(255,255,255,0.015)',
+          background: 'var(--bg-card)',
           borderTop: '1px solid var(--border)',
           borderBottom: '1px solid var(--border)',
         }}>
@@ -329,7 +331,7 @@ export default function HomePage() {
                   transition={{ duration: 0.5, delay: parseInt(step.n) * 0.1 }}
                   style={{
                     padding: '28px 24px',
-                    background: 'rgba(255,255,255,0.03)',
+                    background: 'var(--bg-card)',
                     border: '1px solid var(--border)',
                     borderRadius: 20,
                     textAlign: 'center',
@@ -353,11 +355,29 @@ export default function HomePage() {
           color: 'var(--text-3)',
           fontSize: 13,
         }}>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
-            <span className="gradient-text">EMPIRE EBOOK</span>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, marginBottom:12 }}>
+            <div style={{
+              width:36, height:36,
+              background:'linear-gradient(135deg,#0044cc,#00c8e0)',
+              borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:18, boxShadow:'0 0 16px rgba(0,200,224,0.4)',
+            }}>📚</div>
+            <div style={{ textAlign:'left' }}>
+              <div style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:17, fontWeight:900 }}>
+                <span className="gradient-text">EMPIRE EBOOK</span>
+              </div>
+              <div style={{ fontSize:10, color:'var(--text-3)', letterSpacing:2, textTransform:'uppercase' }}>
+                By Empire du Web
+              </div>
+            </div>
           </div>
-          <p>© 2025 Empire Ebook · Tous droits réservés ·{' '}
-            <a href="/admin" style={{ color: 'var(--cyan)', textDecoration: 'none' }}>Admin</a>
+          <p style={{ marginBottom:8 }}>
+            © 2025 <strong style={{ color:'var(--text-2)' }}>Empire du Web</strong> · Tous droits réservés
+          </p>
+          <p>
+            <a href="/admin" style={{ color:'var(--cyan)', textDecoration:'none', fontSize:12 }}>
+              ⚙️ Espace Admin
+            </a>
           </p>
         </footer>
       </div>
