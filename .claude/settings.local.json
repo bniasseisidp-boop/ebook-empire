@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "C:\\xampp\\htdocs\\empire-ebook-api\\app\\Http\\Controllers",
+      "C:\\xampp\\htdocs\\empire-ebook-api\\app\\Http\\Middleware",
+      "C:\\xampp\\htdocs\\empire-ebook-api\\routes",
+      "C:\\xampp\\htdocs\\empire-ebook-api\\bootstrap"
+    ]
+  }
+}
