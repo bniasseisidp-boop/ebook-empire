@@ -37,7 +37,7 @@ class BookController extends Controller
     /* ── GET /api/books/{id}/preview ─────────── */
     public function preview(Book $book, Request $request)
     {
-        $path = storage_path("app/books/{$book->filename}");
+        $path = storage_path("app/private/books/{$book->filename}");
 
         if (!file_exists($path)) {
             return response()->json(['message' => 'Fichier introuvable'], 404);
@@ -99,7 +99,7 @@ class BookController extends Controller
             return response()->json(['message' => 'Token invalide ou expiré'], 403);
         }
 
-        $path = storage_path("app/books/{$book->filename}");
+        $path = storage_path("app/private/books/{$book->filename}");
         if (!file_exists($path)) return response()->json(['message' => 'Fichier introuvable'], 404);
 
         return response()->download($path, "{$book->title}.pdf", ['Content-Type' => 'application/pdf']);
