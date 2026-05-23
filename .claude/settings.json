@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "additionalDirectories": [
-      "C:\\xampp\\htdocs\\empire-ebook-api\\database\\migrations",
-      "C:\\xampp\\htdocs\\empire-ebook-api\\app\\Models"
-    ]
-  }
-}
