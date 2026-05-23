@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Rocket, Gift, BookOpen, Download, ShoppingCart, Star,
+  Eye, Mail, TrendingUp, Library,
+} from 'lucide-react'
 import ParticleBackground from '../components/Background/ParticleBackground'
 import Header from '../components/Layout/Header'
 import BookCard from '../components/Books/BookCard'
@@ -156,13 +160,15 @@ export default function HomePage() {
             style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}
           >
             <a href="#books" style={{ textDecoration: 'none' }}>
-              <button className="btn btn-primary" style={{ padding: '15px 32px', fontSize: 15 }}>
-                🚀 Explorer les Ebooks
+              <button className="btn btn-primary" style={{ padding: '15px 32px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Rocket size={16} />
+                Explorer les Ebooks
               </button>
             </a>
             <a href="#free" style={{ textDecoration: 'none' }}>
-              <button className="btn btn-cyan" style={{ padding: '15px 32px', fontSize: 15 }}>
-                🎁 Gratuits aujourd'hui
+              <button className="btn btn-cyan" style={{ padding: '15px 32px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Gift size={16} />
+                Gratuits aujourd'hui
               </button>
             </a>
           </motion.div>
@@ -183,13 +189,15 @@ export default function HomePage() {
             }}
           >
             {[
-              { n: books.length, label: 'Ebooks disponibles', icon: '📚' },
-              { n: books.reduce((a,b)=>a+(b.download_count||0),0), label: 'Téléchargements', icon: '⬇️' },
-              { n: books.reduce((a,b)=>a+(b.purchase_count||0),0), label: 'Achats confirmés', icon: '🛒' },
-              { n: '100%', label: 'Satisfaits', icon: '⭐' },
+              { n: books.length, label: 'Ebooks disponibles', Icon: Library },
+              { n: books.reduce((a,b)=>a+(b.download_count||0),0), label: 'Téléchargements', Icon: Download },
+              { n: books.reduce((a,b)=>a+(b.purchase_count||0),0), label: 'Achats confirmés', Icon: ShoppingCart },
+              { n: '100%', label: 'Satisfaits', Icon: Star },
             ].map(s => (
               <div key={s.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 22, marginBottom: 4 }}>{s.icon}</div>
+                <div style={{ marginBottom: 4, lineHeight: 0, display: 'flex', justifyContent: 'center' }}>
+                  <s.Icon size={22} color="var(--cyan)" />
+                </div>
                 <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif" }}>
                   <span className="gradient-text">{s.n}</span>
                 </div>
@@ -208,7 +216,7 @@ export default function HomePage() {
             transition={{ duration: 0.6 }}
             style={{ textAlign: 'center', marginBottom: 48 }}
           >
-            <div className="section-label" style={{ justifyContent: 'center' }}>📖 BIBLIOTHÈQUE PREMIUM</div>
+            <div className="section-label" style={{ justifyContent: 'center', display:'flex', alignItems:'center', gap:6 }}><BookOpen size={13}/>BIBLIOTHÈQUE PREMIUM</div>
             <h2 style={{ fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 800, marginBottom: 12 }}>
               Nos Ebooks <span className="gradient-text">Best-sellers</span>
             </h2>
@@ -318,10 +326,10 @@ export default function HomePage() {
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 32 }}>
               {[
-                { n: '01', icon: '👁', title: 'Lisez 5 minutes', desc: 'Testez gratuitement chaque livre pendant 5 minutes' },
-                { n: '02', icon: '💳', title: 'Achetez / Téléchargez', desc: 'Payez en sécurité via Stripe ou téléchargez gratuitement' },
-                { n: '03', icon: '📩', title: 'Recevez par email', desc: 'Votre livre + licence arrivent en quelques secondes' },
-                { n: '04', icon: '🚀', title: 'Progressez', desc: 'Appliquez les stratégies et dominez votre domaine' },
+                { n: '01', Icon: Eye,          title: 'Lisez 5 minutes',       desc: 'Testez gratuitement chaque livre pendant 5 minutes' },
+                { n: '02', Icon: ShoppingCart, title: 'Achetez / Téléchargez', desc: 'Payez en sécurité via Stripe ou téléchargez gratuitement' },
+                { n: '03', Icon: Mail,         title: 'Recevez par email',      desc: 'Votre livre + licence arrivent en quelques secondes' },
+                { n: '04', Icon: TrendingUp,   title: 'Progressez',             desc: 'Appliquez les stratégies et dominez votre domaine' },
               ].map(step => (
                 <motion.div
                   key={step.n}
@@ -338,7 +346,9 @@ export default function HomePage() {
                   }}
                 >
                   <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: 'var(--cyan)', marginBottom: 12 }}>{step.n}</div>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>{step.icon}</div>
+                  <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                    <step.Icon size={34} color="var(--cyan)" strokeWidth={1.5} />
+                  </div>
                   <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{step.title}</h4>
                   <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>{step.desc}</p>
                 </motion.div>
@@ -360,8 +370,10 @@ export default function HomePage() {
               width:36, height:36,
               background:'linear-gradient(135deg,#0044cc,#00c8e0)',
               borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:18, boxShadow:'0 0 16px rgba(0,200,224,0.4)',
-            }}>📚</div>
+              boxShadow:'0 0 16px rgba(0,200,224,0.4)',
+            }}>
+              <BookOpen size={18} color="#fff" strokeWidth={2} />
+            </div>
             <div style={{ textAlign:'left' }}>
               <div style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:17, fontWeight:900 }}>
                 <span className="gradient-text">EMPIRE EBOOK</span>
@@ -374,10 +386,8 @@ export default function HomePage() {
           <p style={{ marginBottom:8 }}>
             © 2025 <strong style={{ color:'var(--text-2)' }}>Empire du Web</strong> · Tous droits réservés
           </p>
-          <p>
-            <a href="/admin" style={{ color:'var(--cyan)', textDecoration:'none', fontSize:12 }}>
-              ⚙️ Espace Admin
-            </a>
+          <p style={{ color: 'var(--text-3)', fontSize: 12 }}>
+            Conçu avec passion · <span style={{ color: 'var(--cyan)' }}>Empire du Web</span>
           </p>
         </footer>
       </div>
